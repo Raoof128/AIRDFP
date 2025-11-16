@@ -9,9 +9,16 @@ import argparse
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 from pathlib import Path
-import numpy as np
-from sklearn.ensemble import IsolationForest
 import hashlib
+
+# Optional ML dependencies - graceful degradation if not available
+try:
+    import numpy as np
+    from sklearn.ensemble import IsolationForest
+    ML_AVAILABLE = True
+except ImportError:
+    ML_AVAILABLE = False
+    print("⚠️ NumPy/scikit-learn not installed. ML anomaly detection will use rule-based fallback.")
 
 
 class TimelineAnalyzer:
@@ -20,10 +27,15 @@ class TimelineAnalyzer:
     def __init__(self, evidence_sources: List[Dict[str, str]]):
         self.evidence_sources = evidence_sources
         self.timeline_events = []
-        self.ml_model = IsolationForest(
-            contamination=0.1,  # Expect 10% anomalies
-            random_state=42
-        )
+
+        # Initialize ML model if available
+        if ML_AVAILABLE:
+            self.ml_model = IsolationForest(
+                contamination=0.1,  # Expect 10% anomalies
+                random_state=42
+            )
+        else:
+            self.ml_model = None
 
     def generate_super_timeline(self) -> List[Dict]:
         """Create master timeline across all evidence sources"""
@@ -171,12 +183,20 @@ class TimelineAnalyzer:
             return []
 
     def detect_anomalies(self) -> List[Dict]:
-        """ML-based anomaly detection in timeline"""
+        """ML-based anomaly detection in timeline (with rule-based fallback)"""
 
         if len(self.timeline_events) < 10:
-            print("⚠️ Not enough events for ML analysis (minimum 10 required)")
+            print("⚠️ Not enough events for analysis (minimum 10 required)")
             return []
 
+        # Use ML if available, otherwise use rule-based detection
+        if ML_AVAILABLE and self.ml_model is not None:
+            return self._detect_anomalies_ml()
+        else:
+            return self._detect_anomalies_rules()
+
+    def _detect_anomalies_ml(self) -> List[Dict]:
+        """ML-based anomaly detection"""
         print("\n🤖 Running ML anomaly detection...\n")
 
         # Extract features from timeline events
@@ -210,8 +230,60 @@ class TimelineAnalyzer:
             return anomalous_events
 
         except Exception as e:
-            print(f"❌ ML analysis failed: {e}")
-            return []
+            print(f"❌ ML analysis failed: {e}, falling back to rules")
+            return self._detect_anomalies_rules()
+
+    def _detect_anomalies_rules(self) -> List[Dict]:
+        """Rule-based anomaly detection (fallback when ML not available)"""
+        print("\n🔍 Running rule-based anomaly detection...\n")
+
+        anomalous_events = []
+
+        for event in self.timeline_events:
+            score = 0.0
+            reasons = []
+
+            # Rule 1: Critical severity events are always anomalous
+            if event.get('severity') == 'critical':
+                score -= 1.5
+                reasons.append("Critical severity")
+
+            # Rule 2: High severity events
+            if event.get('severity') == 'high':
+                score -= 1.0
+                reasons.append("High severity")
+
+            # Rule 3: Network connections to external IPs
+            if event.get('event_type') == 'network_connection':
+                score -= 0.8
+                reasons.append("External network connection")
+
+            # Rule 4: Process execution events
+            if event.get('event_type') == 'process_execution':
+                score -= 0.6
+                reasons.append("Process execution")
+
+            # Rule 5: File creation/modification
+            if event.get('event_type') in ['file_creation', 'file_modification']:
+                score -= 0.4
+                reasons.append("File system change")
+
+            # If score indicates anomaly, add to list
+            if score < -0.5:  # Threshold
+                anomalous_events.append({
+                    "event": event,
+                    "anomaly_score": score,
+                    "severity": self._score_to_severity(score),
+                    "detection_method": "rule-based",
+                    "reasons": reasons
+                })
+
+        print(f"✅ Detected {len(anomalous_events)} anomalies\n")
+
+        # Sort by anomaly score
+        anomalous_events.sort(key=lambda x: x['anomaly_score'])
+
+        return anomalous_events
 
     def _extract_features(self, event: Dict) -> List[float]:
         """Extract numerical features from event for ML"""

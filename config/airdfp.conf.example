@@ -1,0 +1,118 @@
+# AIRDFP Configuration File
+# Copy to config/airdfp.conf and update with your values
+
+[thehive]
+url = http://localhost:9000
+api_key = YOUR_THEHIVE_API_KEY_HERE
+# Get API key from TheHive UI: Settings → API Keys
+
+[cortex]
+url = http://localhost:9001
+api_key = YOUR_CORTEX_API_KEY_HERE
+# Optional: Only needed if using Cortex analyzers
+
+[velociraptor]
+url = https://localhost:8000
+api_key = YOUR_VELOCIRAPTOR_API_KEY_HERE
+# Optional: Only needed if using Velociraptor for evidence collection
+verify_ssl = false
+
+[siem]
+# SIEM integration settings
+url = https://siem.company.com
+api_key = YOUR_SIEM_API_KEY_HERE
+# Supported SIEMs: Splunk, QRadar, Sentinel, etc.
+
+[soar]
+# SOAR platform integration
+url = http://localhost:3000
+api_key = YOUR_SOAR_API_KEY_HERE
+# Optional: For automated playbook execution
+
+[evidence]
+vault_path = /evidence_vault
+retention_days = 90
+compression = true
+encryption = true
+
+[storage]
+# MinIO/S3 configuration
+endpoint = localhost:9002
+access_key = airdfp_admin
+secret_key = change_this_password_in_production
+bucket = airdfp-evidence
+
+[database]
+# PostgreSQL for analytics
+dsn = postgresql://airdfp:password@localhost:5432/airdfp_analytics
+
+[redis]
+# Redis for caching and queues
+url = redis://localhost:6379
+db = 0
+
+[notifications]
+# Email notifications
+smtp_server = smtp.company.com
+smtp_port = 587
+smtp_use_tls = true
+smtp_username = airdfp-alerts@company.com
+smtp_password = YOUR_SMTP_PASSWORD
+from_address = airdfp-alerts@company.com
+
+# Slack notifications
+slack_webhook_url = https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+
+# PagerDuty notifications
+pagerduty_api_key = YOUR_PAGERDUTY_KEY
+pagerduty_service_id = YOUR_SERVICE_ID
+
+[logging]
+level = INFO
+# Levels: DEBUG, INFO, WARNING, ERROR, CRITICAL
+log_file = /home/user/AIRDFP/logs/airdfp.log
+max_bytes = 10485760  # 10 MB
+backup_count = 5
+
+[ml]
+# Machine learning settings
+use_ml = true
+# Set to false to always use rule-based detection
+contamination = 0.1
+# Percentage of data expected to be anomalous (0.0 - 0.5)
+
+[security]
+# Security settings
+api_rate_limit = 100
+# Requests per minute per IP
+session_timeout = 3600
+# Session timeout in seconds
+enable_audit_log = true
+
+[compliance]
+# Compliance settings
+retention_policy = 90
+# Days to retain evidence (APRA CPS 234: minimum 90 days)
+enable_chain_of_custody = true
+enable_evidence_sealing = true
+
+[performance]
+# Performance tuning
+max_workers = 4
+# Number of worker processes for analysis
+max_memory_dump_size = 10737418240
+# Maximum memory dump size in bytes (10 GB)
+collection_timeout = 300
+# Evidence collection timeout in seconds
+
+[integrations]
+# Third-party integrations
+enable_misp = false
+misp_url = https://misp.company.com
+misp_api_key = YOUR_MISP_KEY
+
+enable_virustotal = false
+virustotal_api_key = YOUR_VT_KEY
+
+enable_threatconnect = false
+threatconnect_api_key = YOUR_TC_KEY

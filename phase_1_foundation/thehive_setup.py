@@ -61,7 +61,7 @@ class TheHiveSetup:
             print(f"❌ Error creating template: {e}")
             return None
 
-    def get_case_templates(self) -> List[str]:
+    def get_case_templates(self) -> List[Dict]:
         """Define incident case templates"""
         return [
             {

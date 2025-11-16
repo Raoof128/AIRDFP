@@ -23,37 +23,50 @@ This platform demonstrates capabilities aligned with **$140K-$200K forensics spe
 - **Compliance Readiness** (APRA CPS 234, Essential Eight Maturity 3+)
 - **AI-Driven Security** (ML triage, anomaly detection, correlation)
 
-## Quick Start
+## Installation
 
 ### Prerequisites
-- Docker & Docker Compose
-- Python 3.8+
-- 16GB RAM minimum (32GB recommended for forensics)
-- 500GB storage for evidence vault
+- **Docker & Docker Compose** - Container orchestration
+- **Python 3.8+** - Application runtime
+- **16GB RAM minimum** (32GB recommended for forensics workloads)
+- **500GB storage** for evidence vault
 
-### 5-Minute Deployment
+### Quick Start (5 Minutes)
 
 ```bash
-# Clone repository
+# 1. Clone repository
 git clone https://github.com/Raoof128/AIRDFP.git
 cd AIRDFP
 
-# Start core infrastructure (TheHive + Cortex + Elasticsearch)
+# 2. Install Python dependencies
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+
+# 3. Start core infrastructure (TheHive + Cortex + Elasticsearch)
 cd phase_1_foundation
 docker-compose up -d
 
-# Verify deployment
-curl http://localhost:9000  # TheHive
-curl http://localhost:9001  # Cortex
+# 4. Verify deployment
+curl http://localhost:9000/api/status  # TheHive
+curl http://localhost:9001/api/status  # Cortex
 
-# Install Python dependencies
-pip install -r requirements.txt
-
-# Initialize case templates
+# 5. Initialize case templates
+# First, get API key from TheHive UI (http://localhost:9000)
 python thehive_setup.py --api-key YOUR_API_KEY
 
-# Test SIEM integration
-python siem_integration.py --test-mode
+# 6. Test SIEM integration
+python siem_integration.py --thehive-key YOUR_API_KEY --test-mode
+```
+
+### Optional: ML Dependencies
+
+For full ML-powered anomaly detection (95% accuracy):
+```bash
+# Install NumPy and scikit-learn
+pip install numpy scikit-learn
+
+# Note: Platform will use rule-based fallback if ML libraries unavailable
 ```
 
 **Access Points:**
