@@ -84,3 +84,28 @@ backup/
 *.tmp
 temp/
 tmp/
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+.pyre/
+
+# Jupyter
+.ipynb_checkpoints
+
+# Security scanning
+security-report.json
+bandit-report.json
+
+# Secrets and credentials
+*.key
+*.pem
+*.crt
+secrets/
+credentials.json
+config/airdfp.conf
+
+# Pre-commit
+.pre-commit-config.yaml.bak
