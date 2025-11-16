@@ -1,0 +1,86 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+venv/
+ENV/
+env/
+
+# Evidence & Sensitive Data
+evidence_vault/
+*.dump
+*.mem
+*.raw
+*.dd
+*.e01
+*.seal
+evidence_vault_key.bin
+
+# Logs
+logs/
+*.log
+*.log.*
+
+# Configuration (with secrets)
+.env
+*.config.yaml
+server.config.yaml
+client.config.yaml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Docker
+docker-compose.override.yml
+
+# Reports
+phase_5_reporting/reports/
+*.pdf
+IR_Report_*.md
+IR_Report_*.json
+
+# Forensics Output
+forensics_report_*.json
+master_timeline.json
+playbook_execution_*.json
+chain_of_custody.json
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+.hypothesis/
+
+# Backup
+*.bak
+*.backup
+backup/
+
+# Temporary
+*.tmp
+temp/
+tmp/

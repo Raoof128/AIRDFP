@@ -1,0 +1,371 @@
+---
+# Incident Response Playbooks - AIRDFP
+# Executable response procedures for automated incident handling
+
+playbooks:
+  RANSOMWARE_ACTIVE:
+    description: "Immediate isolation and evidence preservation"
+    severity: CRITICAL
+    auto_trigger: true
+    estimated_duration: 300  # 5 minutes
+    steps:
+      - name: "Isolate affected system from network"
+        action: network_isolate
+        target: "{{ affected_host }}"
+        timeout: 60
+        critical: true
+        rollback: network_restore
+
+      - name: "Collect memory dump for forensics"
+        action: velociraptor_collect
+        params:
+          collection_type: memory_dump
+          priority: urgent
+        timeout: 120
+
+      - name: "Snapshot VM state (if virtualized)"
+        action: vm_snapshot
+        params:
+          retention_days: 90
+          compression: true
+        timeout: 180
+
+      - name: "Preserve disk state with forensic image"
+        action: forensic_image
+        params:
+          method: "dd_gzip"
+          verify_hash: true
+        storage: "evidence_vault"
+        timeout: 300
+
+      - name: "Create incident case in TheHive"
+        action: thehive_create_case
+        params:
+          template: CRITICAL_MALWARE
+          severity: critical
+          auto_assign: true
+
+      - name: "Notify incident commander"
+        action: notify
+        params:
+          recipients:
+            - "ciso@company.com"
+            - "soc-lead@company.com"
+          priority: P1
+          channels: ["email", "slack", "pagerduty"]
+
+  LATERAL_MOVEMENT_DETECTED:
+    description: "Active Directory forensics and containment"
+    severity: HIGH
+    auto_trigger: true
+    estimated_duration: 600  # 10 minutes
+    steps:
+      - name: "Collect Security event logs from domain controller"
+        action: velociraptor_collect
+        target: "domain_controllers"
+        params:
+          collection_type: event_logs
+          focus_channels: ["Security"]
+          event_ids: [4624, 4672, 4768, 4769, 4776]
+        timeout: 120
+
+      - name: "Extract authentication timeline"
+        action: plaso_timeline
+        params:
+          data_source: "{{ ad_logs }}"
+          output_format: "l2t_csv"
+          focus_artifacts: ["authentication", "privilege_use"]
+        timeout: 180
+
+      - name: "Query SIEM for privilege escalation events"
+        action: query_siem
+        params:
+          query: "EventCode=4672 AND TargetUserName=SYSTEM"
+          timerange: "last_24h"
+          index: "windows-security"
+
+      - name: "Identify compromised credentials"
+        action: credential_analysis
+        params:
+          check_kerberos_tickets: true
+          check_ntlm_hashes: true
+          check_cached_credentials: true
+
+      - name: "Reset compromised credentials (approval required)"
+        action: ad_reset_credentials
+        params:
+          accounts: "{{ compromised_users }}"
+          force_logout: true
+          require_mfa: true
+        approval_required: true
+
+      - name: "Revoke all active session tokens"
+        action: revoke_tokens
+        params:
+          scope: "{{ affected_users }}"
+          include_refresh_tokens: true
+
+  DATA_EXFILTRATION:
+    description: "Network forensics and data loss assessment"
+    severity: CRITICAL
+    auto_trigger: true
+    estimated_duration: 900  # 15 minutes
+    steps:
+      - name: "Capture live network traffic"
+        action: packet_capture
+        params:
+          duration: 300  # 5 minutes
+          interface: "all"
+          filter: "outbound and port (80 or 443 or 22)"
+
+      - name: "Block suspicious outbound connections"
+        action: firewall_block
+        params:
+          direction: "outbound"
+          ip_addresses: "{{ suspicious_ips }}"
+          ports: "{{ suspicious_ports }}"
+        critical: true
+
+      - name: "Query DLP system for policy violations"
+        action: dlp_query
+        params:
+          filters:
+            - direction: outbound
+            - data_classification: ["confidential", "restricted"]
+            - status: ["blocked", "flagged"]
+          timerange: "last_1h"
+
+      - name: "Analyze network flows for data transfer patterns"
+        action: netflow_analysis
+        params:
+          min_bytes: 100000000  # >100MB
+          direction: outbound
+          protocols: ["https", "ftp", "ssh"]
+
+      - name: "Reconstruct transferred data from PCAP"
+        action: wireshark_analysis
+        params:
+          pcap_file: "{{ captured_traffic }}"
+          extract_files: true
+          protocol_hierarchy: true
+
+      - name: "Query database audit logs"
+        action: database_audit
+        params:
+          queries:
+            - "SELECT COUNT(*) FROM audit_log WHERE action='SELECT' AND timestamp > NOW() - INTERVAL 1 HOUR"
+            - "SELECT table_name, rows_accessed FROM audit_log WHERE timestamp > {{ incident_start }}"
+
+      - name: "Quantify data loss"
+        action: data_loss_assessment
+        params:
+          check_databases: true
+          check_file_servers: true
+          check_cloud_storage: true
+          generate_report: true
+
+  ACCOUNT_COMPROMISE:
+    description: "Credential audit and access review"
+    severity: HIGH
+    auto_trigger: true
+    estimated_duration: 450  # 7.5 minutes
+    steps:
+      - name: "Collect authentication logs"
+        action: log_query
+        params:
+          filters:
+            - username: "{{ compromised_account }}"
+            - timerange: "last_30_days"
+          sources: ["AD", "VPN", "Email", "Cloud_Apps"]
+
+      - name: "Analyze access patterns for anomalies"
+        action: access_pattern_analysis
+        params:
+          baseline_period: "90_days"
+          check_impossible_travel: true
+          check_unusual_hours: true
+          check_new_devices: true
+
+      - name: "Review email activity"
+        action: email_audit
+        params:
+          account: "{{ compromised_account }}"
+          check_forwarding_rules: true
+          check_sent_items: true
+          check_calendar_access: true
+          timerange: "last_7_days"
+
+      - name: "Check for data exfiltration via email"
+        action: email_dlp_check
+        params:
+          account: "{{ compromised_account }}"
+          check_attachments: true
+          check_large_emails: true
+          size_threshold: 10485760  # 10MB
+
+      - name: "Generate comprehensive access timeline"
+        action: plaso_timeline
+        params:
+          data_source: "{{ access_logs }}"
+          focus_user: "{{ compromised_account }}"
+          output_format: "json"
+
+      - name: "Disable compromised account"
+        action: ad_disable_account
+        params:
+          account: "{{ compromised_account }}"
+          revoke_tokens: true
+          logout_all_sessions: true
+        critical: true
+
+      - name: "Force password reset for account"
+        action: force_password_reset
+        params:
+          account: "{{ compromised_account }}"
+          complexity_requirements: "strict"
+          mfa_reset: true
+          notify_user: true
+
+      - name: "Review and revoke application permissions"
+        action: oauth_token_review
+        params:
+          account: "{{ compromised_account }}"
+          revoke_suspicious: true
+          revoke_all: false
+
+  MALWARE_DETECTED:
+    description: "Automated malware analysis and containment"
+    severity: HIGH
+    auto_trigger: true
+    estimated_duration: 420  # 7 minutes
+    steps:
+      - name: "Isolate infected endpoint"
+        action: network_isolate
+        target: "{{ affected_host }}"
+        critical: true
+
+      - name: "Collect malware sample"
+        action: file_collection
+        params:
+          file_path: "{{ malware_path }}"
+          preserve_metadata: true
+          calculate_hashes: ["md5", "sha1", "sha256"]
+
+      - name: "Submit to sandbox for analysis"
+        action: sandbox_analysis
+        params:
+          sandbox: "cuckoo"
+          timeout: 300
+          network_simulation: true
+
+      - name: "Collect full memory dump"
+        action: velociraptor_collect
+        params:
+          collection_type: memory_dump
+          priority: urgent
+
+      - name: "Run Volatility analysis"
+        action: volatility_analyze
+        params:
+          dump_file: "{{ memory_dump }}"
+          plugins: ["pslist", "netscan", "malfind", "handles"]
+
+      - name: "Extract IOCs from analysis"
+        action: ioc_extraction
+        params:
+          sources: ["sandbox_report", "volatility_output"]
+          ioc_types: ["ip", "domain", "hash", "mutex"]
+
+      - name: "Search for IOCs across environment"
+        action: ioc_hunt
+        params:
+          iocs: "{{ extracted_iocs }}"
+          scope: "all_endpoints"
+
+      - name: "Update threat intel feeds"
+        action: threat_intel_update
+        params:
+          platform: "MISP"
+          iocs: "{{ extracted_iocs }}"
+          tlp: "amber"
+
+  PHISHING_CAMPAIGN:
+    description: "Email-based attack response"
+    severity: MEDIUM
+    auto_trigger: true
+    estimated_duration: 300  # 5 minutes
+    steps:
+      - name: "Identify all recipients of phishing email"
+        action: email_search
+        params:
+          sender: "{{ phishing_sender }}"
+          subject_contains: "{{ email_subject }}"
+          timerange: "last_24h"
+
+      - name: "Quarantine phishing emails"
+        action: email_quarantine
+        params:
+          message_ids: "{{ phishing_message_ids }}"
+          all_mailboxes: true
+
+      - name: "Check for clicked links"
+        action: proxy_log_analysis
+        params:
+          urls: "{{ phishing_urls }}"
+          timerange: "last_24h"
+
+      - name: "Identify users who clicked malicious link"
+        action: user_identification
+        params:
+          source: "proxy_logs"
+          urls: "{{ phishing_urls }}"
+
+      - name: "Force password reset for affected users"
+        action: ad_reset_credentials
+        params:
+          accounts: "{{ affected_users }}"
+          force_logout: true
+
+      - name: "Scan endpoints of affected users"
+        action: av_scan
+        params:
+          targets: "{{ affected_hosts }}"
+          scan_type: "full"
+
+      - name: "Send security awareness notification"
+        action: notify
+        params:
+          recipients: "{{ all_users }}"
+          template: "phishing_awareness"
+          include_indicators: true
+
+# Global configuration
+config:
+  max_parallel_steps: 3
+  step_timeout_default: 300
+  approval_timeout: 600
+  enable_audit_log: true
+  audit_log_path: "/logs/playbook_executions.log"
+
+  # Notification settings
+  notifications:
+    email_server: "smtp.company.com"
+    email_from: "airdfp-alerts@company.com"
+    slack_webhook: "${SLACK_WEBHOOK_URL}"
+    pagerduty_api_key: "${PAGERDUTY_API_KEY}"
+
+  # Evidence storage
+  evidence:
+    vault_path: "/evidence_vault"
+    retention_days: 90
+    compression: true
+    encryption: true
+
+  # Integration endpoints
+  integrations:
+    thehive_url: "${THEHIVE_URL}"
+    thehive_api_key: "${THEHIVE_API_KEY}"
+    velociraptor_url: "${VELOCIRAPTOR_URL}"
+    velociraptor_api_key: "${VELOCIRAPTOR_API_KEY}"
+    siem_url: "${SIEM_URL}"
+    siem_api_key: "${SIEM_API_KEY}"

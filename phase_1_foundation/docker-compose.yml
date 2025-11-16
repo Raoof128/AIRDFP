@@ -1,0 +1,190 @@
+version: '3.8'
+
+services:
+  # Elasticsearch - Data store for TheHive
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.5.0
+    container_name: airdfp-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms2g -Xmx2g"
+      - cluster.name=airdfp-cluster
+      - node.name=airdfp-node-1
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    networks:
+      - airdfp-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # TheHive - Case Management Platform
+  thehive:
+    image: thehiveproject/thehive:5.0
+    container_name: airdfp-thehive
+    ports:
+      - "9000:9000"
+    environment:
+      - TH_SECRET=airdfp_thehive_secret_key_change_in_production_12345
+      - TH_NO_CONFIG_CORTEX=1
+      - ES_HOSTNAME=elasticsearch
+      - ES_PORT=9200
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    volumes:
+      - thehive-data:/opt/thehive/data
+      - thehive-files:/opt/thehive/files
+      - ./thehive-config:/etc/thehive:ro
+    networks:
+      - airdfp-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/api/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # Cortex - Observable Analysis Engine
+  cortex:
+    image: thehiveproject/cortex:3.1.0
+    container_name: airdfp-cortex
+    ports:
+      - "9001:9001"
+    environment:
+      - CORTEX_SECRET=airdfp_cortex_secret_key_change_in_production_12345
+      - job_directory=/tmp/cortex-jobs
+    volumes:
+      - cortex-data:/opt/cortex/data
+      - cortex-jobs:/tmp/cortex-jobs
+      - ./cortex-config:/etc/cortex:ro
+    networks:
+      - airdfp-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9001/api/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # Redis - Message queue and cache
+  redis:
+    image: redis:7.2-alpine
+    container_name: airdfp-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - airdfp-network
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # MinIO - S3-compatible object storage for evidence
+  minio:
+    image: minio/minio:latest
+    container_name: airdfp-minio
+    ports:
+      - "9002:9000"
+      - "9003:9001"
+    environment:
+      - MINIO_ROOT_USER=airdfp_admin
+      - MINIO_ROOT_PASSWORD=change_this_password_in_production
+    volumes:
+      - minio-data:/data
+    networks:
+      - airdfp-network
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # PostgreSQL - Structured data for analytics
+  postgres:
+    image: postgres:15-alpine
+    container_name: airdfp-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=airdfp
+      - POSTGRES_PASSWORD=change_this_password_in_production
+      - POSTGRES_DB=airdfp_analytics
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - airdfp-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airdfp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # AIRDFP API Gateway
+  airdfp-api:
+    build:
+      context: ../
+      dockerfile: phase_1_foundation/Dockerfile.api
+    container_name: airdfp-api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - THEHIVE_URL=http://thehive:9000
+      - CORTEX_URL=http://cortex:9001
+      - REDIS_URL=redis://redis:6379
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=airdfp_admin
+      - MINIO_SECRET_KEY=change_this_password_in_production
+      - POSTGRES_DSN=postgresql://airdfp:change_this_password_in_production@postgres:5432/airdfp_analytics
+    depends_on:
+      - thehive
+      - cortex
+      - redis
+      - minio
+      - postgres
+    volumes:
+      - ../evidence_vault:/evidence_vault
+      - ../logs:/app/logs
+    networks:
+      - airdfp-network
+    restart: unless-stopped
+
+volumes:
+  es-data:
+    driver: local
+  thehive-data:
+    driver: local
+  thehive-files:
+    driver: local
+  cortex-data:
+    driver: local
+  cortex-jobs:
+    driver: local
+  redis-data:
+    driver: local
+  minio-data:
+    driver: local
+  postgres-data:
+    driver: local
+
+networks:
+  airdfp-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
